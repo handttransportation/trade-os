@@ -7,17 +7,40 @@ export type Candle = {
   volume: number;
 };
 
+type HistoricalCandlesResponse = {
+  candles?: Candle[];
+  error?: string;
+};
+
 export async function getHistoricalCandles(
   symbol: string,
   resolution: string,
   from: number,
-  to: number
+  to: number,
+  baseUrl = ""
 ): Promise<Candle[]> {
-  console.log(
-    "Historical candles will be loaded for:",
+  const params = new URLSearchParams({
     symbol,
-    resolution
+    resolution,
+    from: String(from),
+    to: String(to),
+  });
+
+  const response = await fetch(
+    `${baseUrl}/api/market/candles?${params.toString()}`,
+    {
+      cache: "no-store",
+    }
   );
 
-  return [];
+  const data =
+    (await response.json()) as HistoricalCandlesResponse;
+
+  if (!response.ok) {
+    throw new Error(
+      data.error ?? "Unable to load historical candles."
+    );
+  }
+
+  return data.candles ?? [];
 }

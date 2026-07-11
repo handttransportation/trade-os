@@ -13,9 +13,12 @@ type QuoteError = {
   error?: string;
 };
 
-export async function getQuote(symbol: string): Promise<MarketQuote> {
+export async function getQuote(
+  symbol: string,
+  baseUrl = ""
+): Promise<MarketQuote> {
   const response = await fetch(
-    `/api/market/quote?symbol=${encodeURIComponent(symbol)}`,
+    `${baseUrl}/api/market/quote?symbol=${encodeURIComponent(symbol)}`,
     {
       cache: "no-store",
     }

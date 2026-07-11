@@ -82,14 +82,19 @@ export default function MarketStatus() {
   );
 
   useEffect(() => {
-    setMounted(true);
-    setMarketState(getMarketState());
+    const initialUpdate = window.setTimeout(() => {
+      setMounted(true);
+      setMarketState(getMarketState());
+    }, 0);
 
     const interval = window.setInterval(() => {
       setMarketState(getMarketState());
     }, 60000);
 
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(initialUpdate);
+      window.clearInterval(interval);
+    };
   }, []);
 
   if (!mounted || !marketState) {

@@ -3,6 +3,7 @@ import type {
   Signal,
   StrategyResult,
 } from "./StrategyTypes";
+import { buildRiskPlan } from "./RiskEngine";
 
 export type TradingStrategy = {
   name: string;
@@ -16,6 +17,7 @@ export type CombinedStrategyResult = {
   entry: number;
   stopLoss: number;
   takeProfit: number;
+  rewardRiskRatio: number;
   results: StrategyResult[];
 };
 
@@ -72,19 +74,26 @@ export function runStrategyEngine(
   const signal = calculateCombinedSignal(results);
   const confidence = calculateAverageConfidence(results, signal);
 
-  const matchingResults = results.filter(
-    (result) => result.signal === signal
+  const fallbackATR = Math.max(
+    market.currentPrice * 0.01,
+    market.high - market.low
   );
 
-  const primaryResult = matchingResults[0] ?? results[0];
+  const atr = market.atr ?? fallbackATR;
+
+  const riskPlan =
+    signal === "SELL"
+      ? buildRiskPlan(market.currentPrice, atr, "SHORT")
+      : buildRiskPlan(market.currentPrice, atr, "LONG");
 
   return {
     symbol: market.symbol,
     signal,
     confidence,
-    entry: primaryResult?.entry ?? market.currentPrice,
-    stopLoss: primaryResult?.stopLoss ?? market.currentPrice,
-    takeProfit: primaryResult?.takeProfit ?? market.currentPrice,
+    entry: riskPlan.entry,
+    stopLoss: riskPlan.stopLoss,
+    takeProfit: riskPlan.takeProfit,
+    rewardRiskRatio: riskPlan.rewardRiskRatio,
     results,
   };
 }

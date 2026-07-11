@@ -1,11 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMarket } from "@/context/MarketContext";
 import { useMarketData } from "@/context/MarketDataContext";
+import { getHistoricalCandles } from "@/services/historicalData";
 import { runStrategyEngine } from "@/strategies/core/StrategyEngine";
 import { trendFollowingStrategy } from "@/strategies/setups/TrendFollowing";
 import { breakoutStrategy } from "@/strategies/setups/Breakout";
+import { getLatestATR } from "@/strategies/indicators/ATR";
+import TechnicalAnalysisCard from "@/components/TechnicalAnalysisCard";
 
 export default function StrategiesPage() {
   const { activeSymbol } = useMarket();
@@ -13,6 +16,54 @@ export default function StrategiesPage() {
 
   const symbol = activeSymbol.replace("NASDAQ:", "");
   const quote = quotes[symbol];
+
+  const [atr, setAtr] = useState<number | null>(null);
+  const [atrError, setAtrError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadATR() {
+      try {
+        setAtrError("");
+
+        const to = Math.floor(Date.now() / 1000);
+        const from = to - 60 * 60 * 24 * 400;
+
+        const candles = await getHistoricalCandles(
+          symbol,
+          "D",
+          from,
+          to
+        );
+
+        const latestATR = getLatestATR(candles, 14);
+
+        if (latestATR === null) {
+          throw new Error("Not enough candle data to calculate ATR.");
+        }
+
+        if (!cancelled) {
+          setAtr(latestATR);
+        }
+      } catch (caughtError) {
+        if (!cancelled) {
+          setAtr(null);
+          setAtrError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Unable to calculate ATR."
+          );
+        }
+      }
+    }
+
+    loadATR();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
 
   const result = useMemo(() => {
     if (!quote) {
@@ -28,10 +79,11 @@ export default function StrategiesPage() {
         low: quote.low,
         previousClose: quote.previousClose,
         volume: 0,
+        atr: atr ?? undefined,
       },
       [trendFollowingStrategy, breakoutStrategy]
     );
-  }, [quote, symbol]);
+  }, [atr, quote, symbol]);
 
   if (isLoading) {
     return (
@@ -61,18 +113,39 @@ export default function StrategiesPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Strategies</h1>
         <p className="mt-2 text-slate-400">
-          Compare strategy signals for {symbol}.
+          Compare strategy signals and technical analysis for {symbol}.
         </p>
       </div>
 
-      <section className="rounded-xl bg-slate-900 p-6">
-        <p className="text-sm text-slate-400">Combined Signal</p>
+      <TechnicalAnalysisCard />
 
-        <p className={`mt-2 text-4xl font-bold ${signalColor}`}>
-          {result.signal}
-        </p>
+      <section className="mt-8 rounded-xl bg-slate-900 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm text-slate-400">
+              Combined Signal
+            </p>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+            <p className={`mt-2 text-4xl font-bold ${signalColor}`}>
+              {result.signal}
+            </p>
+          </div>
+
+          <div className="text-right">
+            <p className="text-sm text-slate-400">ATR 14</p>
+            <p className="mt-1 text-xl font-semibold">
+              {atr !== null ? `$${atr.toFixed(2)}` : "Loading..."}
+            </p>
+
+            {atrError && (
+              <p className="mt-1 text-xs text-red-400">
+                {atrError}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-5">
           <div className="rounded-lg bg-slate-950 p-4">
             <p className="text-sm text-slate-400">Confidence</p>
             <p className="mt-1 text-xl font-semibold">
@@ -98,6 +171,15 @@ export default function StrategiesPage() {
             <p className="text-sm text-slate-400">Take Profit</p>
             <p className="mt-1 text-xl font-semibold">
               ${result.takeProfit.toFixed(2)}
+            </p>
+          </div>
+
+          <div className="rounded-lg bg-slate-950 p-4">
+            <p className="text-sm text-slate-400">
+              Reward / Risk
+            </p>
+            <p className="mt-1 text-xl font-semibold">
+              1 : {result.rewardRiskRatio.toFixed(2)}
             </p>
           </div>
         </div>

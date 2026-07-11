@@ -18,4 +18,5 @@ export type MarketSnapshot = {
   low: number;
   previousClose: number;
   volume: number;
+  atr?: number;
 };

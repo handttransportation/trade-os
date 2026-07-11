@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useMarket } from "@/context/MarketContext";
 import LiveClock from "./LiveClock";
 import MarketStatus from "./MarketStatus";
-import { useMarket } from "@/context/MarketContext";
+import WatchlistSelector from "./WatchlistSelector";
+import TradingModeSelector from "./TradingModeSelector";
 
 export default function Header() {
   const { activeSymbol, setActiveSymbol } = useMarket();
@@ -11,10 +13,15 @@ export default function Header() {
 
   const displaySymbol = activeSymbol.replace("NASDAQ:", "");
 
-  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+  function handleSearch(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
-    const cleanSymbol = search.trim().toUpperCase();
+    const cleanSymbol = search
+      .trim()
+      .toUpperCase()
+      .replace("NASDAQ:", "");
 
     if (!cleanSymbol) {
       return;
@@ -25,27 +32,57 @@ export default function Header() {
   }
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 bg-slate-950 px-8 py-4">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Trade OS</h1>
-        <p className="text-sm text-slate-400">
-          Active symbol: {displaySymbol}
-        </p>
-      </div>
+    <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 px-4 py-4 backdrop-blur md:px-6">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-400">
+            Trade OS Workspace
+          </p>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <form onSubmit={handleSearch}>
-          <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search symbol..."
-            className="w-44 rounded-lg border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-slate-600"
-          />
-        </form>
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <h2 className="text-xl font-bold text-white md:text-2xl">
+              {displaySymbol}
+            </h2>
 
-        <MarketStatus />
-        <LiveClock />
+            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-1 text-xs text-slate-400">
+              Active Symbol
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
+          <div className="flex flex-wrap gap-3">
+            <TradingModeSelector />
+            <WatchlistSelector />
+          </div>
+
+          <form
+            onSubmit={handleSearch}
+            className="flex min-w-0 flex-1 gap-2 lg:min-w-[260px]"
+          >
+            <input
+              type="text"
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+              placeholder="Search symbol..."
+              className="min-w-0 flex-1 rounded-lg border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-sky-500"
+            />
+
+            <button
+              type="submit"
+              className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500"
+            >
+              Search
+            </button>
+          </form>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <MarketStatus />
+            <LiveClock />
+          </div>
+        </div>
       </div>
     </header>
   );

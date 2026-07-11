@@ -1,42 +1,86 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  getCachedValue,
+  setCachedValue,
+} from "@/services/cache/memoryCache";
 
-type FinnhubCandleResponse = {
-  c?: number[];
-  h?: number[];
-  l?: number[];
-  o?: number[];
-  s?: string;
-  t?: number[];
-  v?: number[];
+type TwelveDataValue = {
+  datetime: string;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume?: string;
 };
 
-const allowedResolutions = new Set([
-  "1",
-  "5",
-  "15",
-  "30",
-  "60",
-  "D",
-  "W",
-  "M",
-]);
+type TwelveDataResponse = {
+  status?: string;
+  code?: number;
+  message?: string;
+  values?: TwelveDataValue[];
+};
+
+type Candle = {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+type CandlePayload = {
+  provider: string;
+  symbol: string;
+  resolution: string;
+  cached: boolean;
+  candles: Candle[];
+};
+
+const intervalMap: Record<string, string> = {
+  "1": "1min",
+  "5": "5min",
+  "15": "15min",
+  "30": "30min",
+  "60": "1h",
+  D: "1day",
+  W: "1week",
+  M: "1month",
+};
+
+function getCacheDuration(resolution: string) {
+  const fiveMinutes = 5 * 60 * 1000;
+  const oneHour = 60 * 60 * 1000;
+
+  return resolution === "D" ||
+    resolution === "W" ||
+    resolution === "M"
+    ? oneHour
+    : fiveMinutes;
+}
 
 export async function GET(request: NextRequest) {
-  const apiKey = process.env.FINNHUB_API_KEY;
+  const apiKey = process.env.TWELVE_DATA_API_KEY;
+  const params = request.nextUrl.searchParams;
+
+  const symbol = params
+    .get("symbol")
+    ?.trim()
+    .toUpperCase();
+
+  const resolution = params.get("resolution") ?? "D";
+  const from = Number(params.get("from"));
+  const to = Number(params.get("to"));
 
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Finnhub API key is not configured." },
+      {
+        error:
+          "TWELVE_DATA_API_KEY is not configured.",
+      },
       { status: 500 }
     );
   }
-
-  const searchParams = request.nextUrl.searchParams;
-
-  const symbol = searchParams.get("symbol")?.trim().toUpperCase();
-  const resolution = searchParams.get("resolution") ?? "15";
-  const from = Number(searchParams.get("from"));
-  const to = Number(searchParams.get("to"));
 
   if (!symbol) {
     return NextResponse.json(
@@ -45,7 +89,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!allowedResolutions.has(resolution)) {
+  const interval = intervalMap[resolution];
+
+  if (!interval) {
     return NextResponse.json(
       { error: "Unsupported candle resolution." },
       { status: 400 }
@@ -59,66 +105,143 @@ export async function GET(request: NextRequest) {
     to <= from
   ) {
     return NextResponse.json(
-      { error: "A valid from/to Unix timestamp range is required." },
+      {
+        error:
+          "A valid from/to timestamp range is required.",
+      },
       { status: 400 }
     );
   }
 
-  const endpoint = new URL("https://finnhub.io/api/v1/stock/candle");
+  const cacheKey = [
+    "candles",
+    symbol,
+    resolution,
+    from,
+    to,
+  ].join(":");
+
+  const cachedPayload =
+    getCachedValue<CandlePayload>(cacheKey);
+
+  if (cachedPayload) {
+    return NextResponse.json({
+      ...cachedPayload,
+      cached: true,
+    });
+  }
+
+  const endpoint = new URL(
+    "https://api.twelvedata.com/time_series"
+  );
+
   endpoint.searchParams.set("symbol", symbol);
-  endpoint.searchParams.set("resolution", resolution);
-  endpoint.searchParams.set("from", String(from));
-  endpoint.searchParams.set("to", String(to));
+  endpoint.searchParams.set("interval", interval);
+  endpoint.searchParams.set("outputsize", "500");
+  endpoint.searchParams.set(
+    "timezone",
+    "America/New_York"
+  );
+  endpoint.searchParams.set("apikey", apiKey);
 
   try {
     const response = await fetch(endpoint, {
-      headers: {
-        "X-Finnhub-Token": apiKey,
-      },
       cache: "no-store",
     });
 
-    if (!response.ok) {
+    const data =
+      (await response.json()) as TwelveDataResponse;
+
+    if (!response.ok || data.status === "error") {
       return NextResponse.json(
         {
           error:
-            response.status === 429
-              ? "Finnhub rate limit reached."
-              : "Finnhub candle request failed.",
+            data.message ??
+            "Twelve Data candle request failed.",
+          upstreamStatus: response.status,
+          upstreamCode: data.code,
         },
-        { status: response.status }
+        {
+          status: response.ok
+            ? 502
+            : response.status,
+        }
       );
     }
 
-    const data = (await response.json()) as FinnhubCandleResponse;
-
-    if (data.s !== "ok") {
+    if (!data.values || data.values.length === 0) {
       return NextResponse.json(
         {
           error:
-            data.s === "no_data"
-              ? "No candle data was returned."
-              : "Candle data is unavailable for this account or symbol.",
+            "Twelve Data returned no candle values.",
         },
         { status: 404 }
       );
     }
 
-    const timestamps = data.t ?? [];
+    const candles = data.values
+      .map((value) => ({
+        timestamp: Math.floor(
+          new Date(
+            `${value.datetime} GMT-0400`
+          ).getTime() / 1000
+        ),
+        open: Number(value.open),
+        high: Number(value.high),
+        low: Number(value.low),
+        close: Number(value.close),
+        volume: Number(value.volume ?? 0),
+      }))
+      .filter(
+        (candle) =>
+          Number.isFinite(candle.timestamp) &&
+          candle.timestamp >= from &&
+          candle.timestamp <= to &&
+          Number.isFinite(candle.open) &&
+          Number.isFinite(candle.high) &&
+          Number.isFinite(candle.low) &&
+          Number.isFinite(candle.close)
+      )
+      .sort(
+        (first, second) =>
+          first.timestamp - second.timestamp
+      );
 
-    const candles = timestamps.map((timestamp, index) => ({
-      timestamp,
-      open: data.o?.[index] ?? 0,
-      high: data.h?.[index] ?? 0,
-      low: data.l?.[index] ?? 0,
-      close: data.c?.[index] ?? 0,
-      volume: data.v?.[index] ?? 0,
-    }));
+    if (candles.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "No candles were found inside the requested range.",
+        },
+        { status: 404 }
+      );
+    }
 
-    return NextResponse.json({ symbol, resolution, candles });
-  } catch {
+    const payload: CandlePayload = {
+      provider: "Twelve Data",
+      symbol,
+      resolution,
+      cached: false,
+      candles,
+    };
+
+    setCachedValue(
+      cacheKey,
+      payload,
+      getCacheDuration(resolution)
+    );
+
+    return NextResponse.json(payload);
+  } catch (caughtError) {
     return NextResponse.json(
-      { error: "Unable to contact Finnhub." },
+      {
+        error:
+          "Trade OS could not contact Twelve Data.",
+        details:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unknown server error.",
+      },
       { status: 502 }
     );
   }

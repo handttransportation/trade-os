@@ -66,11 +66,18 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    refreshQuotes();
+    const initialLoad = window.setTimeout(() => {
+      void refreshQuotes();
+    }, 0);
 
-    const interval = window.setInterval(refreshQuotes, 60000);
+    const interval = window.setInterval(() => {
+      void refreshQuotes();
+    }, 60000);
 
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(initialLoad);
+      window.clearInterval(interval);
+    };
   }, []);
 
   return (
