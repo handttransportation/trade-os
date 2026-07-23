@@ -8,6 +8,7 @@ import { useTradingMode } from "@/context/TradingModeContext";
 import { buildMorningBriefing } from "@/services/morningBriefing";
 import TradePlanCard from "./TradePlanCard";
 import TradingChatPanel from "./TradingChatPanel";
+import AIMarketCopilot from "./AIMarketCopilot";
 
 export default function OpportunityOverview() {
   const { activeWatchlist } = useWatchlist();
@@ -238,6 +239,7 @@ export default function OpportunityOverview() {
         </p>
       </div>
 
+      <AIMarketCopilot analysis={bestOpportunity} />
       <TradePlanCard analysis={bestOpportunity} />
       <TradingChatPanel analysis={bestOpportunity} />
     </section>

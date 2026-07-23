@@ -113,12 +113,22 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const cacheBucketMilliseconds =
+    resolution === "D" ||
+    resolution === "W" ||
+    resolution === "M"
+      ? 60 * 60 * 1000
+      : 5 * 60 * 1000;
+
+  const cacheBucket = Math.floor(
+    Date.now() / cacheBucketMilliseconds
+  );
+
   const cacheKey = [
     "candles",
     symbol,
     resolution,
-    from,
-    to,
+    cacheBucket,
   ].join(":");
 
   const cachedPayload =
