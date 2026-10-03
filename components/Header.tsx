@@ -33,13 +33,13 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 px-4 py-4 backdrop-blur md:px-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-400">
-            Trade OS Workspace
-          </p>
+      <p className="text-center text-sm font-black uppercase tracking-[0.35em] text-sky-400">
+        TTINDAHOOD
+      </p>
 
-          <div className="mt-1 flex flex-wrap items-center gap-3">
+      <div className="mt-3 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-xl font-bold text-white md:text-2xl">
               {displaySymbol}
             </h2>
@@ -58,7 +58,7 @@ export default function Header() {
 
           <form
             onSubmit={handleSearch}
-            className="flex min-w-0 flex-1 gap-2 lg:min-w-[260px]"
+            className="flex min-w-0 flex-1 gap-2 lg:min-w-65"
           >
             <input
               type="text"
